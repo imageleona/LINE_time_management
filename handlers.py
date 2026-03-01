@@ -20,6 +20,10 @@ def parse_command(text: str) -> tuple[str, str]:
         return "today", ""
     if lower == "cancel":
         return "cancel", ""
+    if lower in ("good morning", "おはよう"):
+        return "good_morning", ""
+    if lower in ("good night", "おやすみ"):
+        return "good_night", ""
     return "unknown", stripped
 
 
@@ -34,6 +38,10 @@ def dispatch(command: str, argument: str, user_id: str) -> str:
         return handle_today(user_id)
     if command == "cancel":
         return handle_cancel(user_id)
+    if command == "good_morning":
+        return handle_good_morning(user_id)
+    if command == "good_night":
+        return handle_good_night(user_id)
     return handle_unknown(argument)
 
 
@@ -132,12 +140,62 @@ def handle_cancel(user_id: str) -> str:
     return f"Cancelled task '{task}' without saving."
 
 
+def handle_good_morning(user_id: str) -> str:
+    now = datetime.now(timezone.utc)
+    try:
+        sheets.log_event(user_id, "wake", now)
+    except Exception as e:
+        return f"Good morning! Failed to record wake time: {e}"
+
+    local_now = now.astimezone()
+    reply = f"Good morning! Wake time recorded at {local_now.strftime('%H:%M:%S')}."
+
+    try:
+        last_bedtime = sheets.get_last_event(user_id, "bedtime")
+        if last_bedtime:
+            bed_dt = datetime.strptime(
+                f"{last_bedtime['date']} {last_bedtime['start_time']}", "%Y-%m-%d %H:%M:%S"
+            ).astimezone()
+            hours_slept = round((local_now - bed_dt).total_seconds() / 3600, 1)
+            reply += f"\nYou slept for {hours_slept} hours (since {bed_dt.strftime('%H:%M:%S')})."
+    except Exception:
+        pass
+
+    return reply
+
+
+def handle_good_night(user_id: str) -> str:
+    now = datetime.now(timezone.utc)
+    try:
+        sheets.log_event(user_id, "bedtime", now)
+    except Exception as e:
+        return f"Good night! Failed to record bedtime: {e}"
+
+    local_now = now.astimezone()
+    reply = f"Good night! Bedtime recorded at {local_now.strftime('%H:%M:%S')}."
+
+    try:
+        last_wake = sheets.get_last_event(user_id, "wake")
+        if last_wake:
+            wake_dt = datetime.strptime(
+                f"{last_wake['date']} {last_wake['start_time']}", "%Y-%m-%d %H:%M:%S"
+            ).astimezone()
+            hours_awake = round((local_now - wake_dt).total_seconds() / 3600, 1)
+            reply += f"\nYou were up for {hours_awake} hours (since {wake_dt.strftime('%H:%M:%S')})."
+    except Exception:
+        pass
+
+    return reply
+
+
 def handle_unknown(text: str) -> str:
     return (
         "Available commands:\n"
-        "  start <task> — begin tracking a task\n"
-        "  stop         — finish and save current task\n"
-        "  status       — show elapsed time for active task\n"
-        "  today        — list today's completed entries\n"
-        "  cancel       — discard active task without saving"
+        "  start <task>  — begin tracking a task\n"
+        "  stop          — finish and save current task\n"
+        "  status        — show elapsed time for active task\n"
+        "  today         — list today's completed entries\n"
+        "  cancel        — discard active task without saving\n"
+        "  good morning  — record wake time\n"
+        "  good night    — record bedtime + hours awake"
     )

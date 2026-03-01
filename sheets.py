@@ -45,6 +45,42 @@ def append_entry(user_id: str, task: str, start_time: datetime, end_time: dateti
     ).execute()
 
 
+def log_event(user_id: str, event_name: str, timestamp: datetime) -> None:
+    local_t = timestamp.astimezone()
+    row = [
+        local_t.strftime("%Y-%m-%d"),
+        local_t.strftime("%H:%M:%S"),
+        local_t.strftime("%H:%M:%S"),
+        0,
+        event_name,
+        user_id,
+    ]
+    body = {"values": [row]}
+    _sheet.values().append(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"{SHEET_NAME}!A:F",
+        valueInputOption="USER_ENTERED",
+        body=body,
+    ).execute()
+
+
+def get_last_event(user_id: str, event_name: str) -> dict | None:
+    result = _sheet.values().get(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"{SHEET_NAME}!A:F",
+    ).execute()
+
+    rows = result.get("values", [])
+    last = None
+    for row in rows[1:]:  # skip header
+        if len(row) < 6:
+            continue
+        row_date, start_t, end_t, duration, task, row_user = row[:6]
+        if task == event_name and row_user == user_id:
+            last = {"date": row_date, "start_time": start_t}
+    return last
+
+
 def get_today_entries(user_id: str) -> list[dict]:
     today_str = date.today().strftime("%Y-%m-%d")
     result = _sheet.values().get(
