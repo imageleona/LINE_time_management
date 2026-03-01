@@ -25,6 +25,11 @@ parser = WebhookParser(CHANNEL_SECRET)
 _config = Configuration(access_token=CHANNEL_ACCESS_TOKEN)
 
 
+@app.get("/callback")
+async def callback_verify():
+    return {"status": "ok"}
+
+
 @app.post("/callback")
 async def callback(request: Request):
     body = await request.body()
